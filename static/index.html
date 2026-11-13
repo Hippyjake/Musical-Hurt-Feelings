@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Musical Hurt Feelings</title>
+<link rel="stylesheet" href="/static/css/index.css">
+<link rel="stylesheet" href="/static/css/awards.css">
+</head>
+<body>
+<header>
+  <h1><span>Musical</span><span>Hurt</span><span>Feelings</span></h1>
+  <p id="who"></p>
+</header>
+<main>
+  <section id="awards" class="card" hidden></section>
+  <section id="join" class="card" hidden>
+    <h2>Join the game</h2>
+    <form onsubmit="event.preventDefault();join()">
+      <input id="name" type="text" maxlength="30" placeholder="Your name" autocomplete="off" required>
+      <button>Join game</button>
+    </form>
+  </section>
+
+  <div id="game" hidden>
+    <section id="now" class="card"></section>
+    <section id="submit" class="card">
+      <h2>Submit a song</h2>
+      <form onsubmit="event.preventDefault();addSong(this)">
+        <input name="link" type="text" inputmode="url" placeholder="Spotify or YouTube link (optional)" onchange="lookup(this)" onpaste="setTimeout(()=>this.blur(),0)">
+        <input name="title" type="text" maxlength="120" placeholder="Song title" required>
+        <input name="artist" type="text" maxlength="120" placeholder="Artist">
+        <button>Submit song</button>
+      </form>
+    </section>
+    <section id="queue" class="card"></section>
+    <section id="board" class="card"></section>
+    <section id="host" class="card"></section>
+  </div>
+</main>
+<div id="toast" hidden></div>
+
+<script src="/static/js/awards.js"></script>
+<script src="/static/js/index.js"></script>
+</body>
+</html>

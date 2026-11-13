@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Leaderboard - Musical Hurt Feelings</title>
+<link rel="stylesheet" href="/static/css/leaderboard.css">
+<link rel="stylesheet" href="/static/css/awards.css">
+</head>
+<body>
+<header>
+  <h1>Leaderboard</h1>
+  <p><a href="/">Back to the game</a></p>
+  <select id="night" onchange="pick=this.value;load()"></select>
+</header>
+<main>
+  <section id="awards" class="card" hidden></section>
+  <section class="card"><h2>Rankings</h2><div id="rank" class="scroll"></div></section>
+  <section class="card"><h2>Every score</h2><div id="votes" class="scroll"></div></section>
+</main>
+<script src="/static/js/awards.js"></script>
+<script src="/static/js/leaderboard.js"></script>
+</body>
+</html>

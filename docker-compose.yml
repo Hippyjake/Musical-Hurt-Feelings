@@ -1,0 +1,11 @@
+services:
+  musical-hurt-feeling:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      HOST_PIN: ${HOST_PIN:?Set HOST_PIN in a .env file (see .env.example)}
+      # CATEGORIES: "Vibe,Lyrics,Musicianship,Originality,Would play again"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

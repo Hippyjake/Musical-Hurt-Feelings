@@ -1,0 +1,4 @@
+.award{display:grid;gap:2px;padding:12px 0;border-top:1px solid var(--line)}
+h2+.award{border-top:0}
+.award b{color:var(--mute);font-size:14px;font-weight:600}
+.award .win{font:400 28px/1.1 var(--poster);color:var(--hit)}
