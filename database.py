@@ -8,11 +8,11 @@ from config import CATEGORIES, DB
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS players(
-  id INTEGER PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE,
   night_id INTEGER NOT NULL DEFAULT 1, UNIQUE(name, night_id));
 CREATE TABLE IF NOT EXISTS categories(id INTEGER PRIMARY KEY, name TEXT NOT NULL, pos INTEGER);
 CREATE TABLE IF NOT EXISTS songs(
-  id INTEGER PRIMARY KEY, title TEXT NOT NULL, artist TEXT, link TEXT,
+  id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, artist TEXT, link TEXT,
   player_id INTEGER NOT NULL, revealed INTEGER DEFAULT 0, night_id INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS scores(
   song_id INTEGER, player_id INTEGER, category_id INTEGER, value INTEGER NOT NULL,
@@ -33,6 +33,29 @@ def backup_db(con):
     dest.close()
 
 
+def never_reuse_ids(con, table):
+    """Rebuild an older table so deleted ids are never handed out again.
+
+    Phones remember their player id. If a removed player's id was reused, that
+    phone would silently start playing as whoever joined next.
+    """
+    sql = con.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()[0]
+    if "AUTOINCREMENT" in sql.upper():
+        return
+    backup_db(con)
+    new_sql = sql.replace("INTEGER PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT", 1)
+    con.executescript(
+        f"""
+        ALTER TABLE {table} RENAME TO {table}_old;
+        {new_sql};
+        INSERT INTO {table} SELECT * FROM {table}_old;
+        DROP TABLE {table}_old;
+        """
+    )
+
+
 def init_db():
     os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
     con = sqlite3.connect(DB, timeout=10)
@@ -43,7 +66,7 @@ def init_db():
         con.executescript(
             """
             ALTER TABLE players RENAME TO players_old;
-            CREATE TABLE players(id INTEGER PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE,
+            CREATE TABLE players(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL COLLATE NOCASE,
               night_id INTEGER NOT NULL DEFAULT 1, UNIQUE(name, night_id));
             INSERT INTO players(id, name, night_id) SELECT id, name, 1 FROM players_old;
             DROP TABLE players_old;
@@ -51,6 +74,8 @@ def init_db():
         )
     if "night_id" not in [r[1] for r in con.execute("PRAGMA table_info(songs)")]:
         con.execute("ALTER TABLE songs ADD COLUMN night_id INTEGER NOT NULL DEFAULT 1")
+    never_reuse_ids(con, "players")
+    never_reuse_ids(con, "songs")
     if not con.execute("SELECT 1 FROM nights").fetchone():
         con.execute("INSERT INTO nights(id, started) VALUES(1, ?)", (time.time(),))
     have = {name: cid for cid, name in con.execute("SELECT id, name FROM categories")}

@@ -40,7 +40,7 @@ function nowView(c) {
 }
 
 function render() {
-  if (me && !S.players.some(p => p.id === me.id)) { me = null; localStorage.removeItem('mhf_me'); }
+  if (me && !S.players.some(p => p.id === me.id && p.name === me.name)) { me = null; localStorage.removeItem('mhf_me'); }
   $('#join').hidden = !!me;
   if (!me && !$('#name').value) $('#name').value = localStorage.getItem('mhf_name') || '';
   showAwards();
