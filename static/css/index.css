@@ -56,4 +56,8 @@ summary{cursor:pointer;color:var(--mute)}
 #host h3{margin:16px 0 4px;font-size:16px}
 button.danger{background:none;color:var(--hit);border:1px solid var(--hit);opacity:.8}
 .zone{margin-top:20px;padding-top:12px;border-top:1px dashed var(--line)}
+/* Voter chips: who has scored the current song and who we're waiting on */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.chip{padding:4px 10px;border:1px dashed var(--line);border-radius:999px;font-size:14px;color:var(--mute)}
+.chip.done{border:1px solid var(--hit);background:var(--hit);color:var(--bg);font-weight:600}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);padding:10px 16px;background:var(--ink);color:var(--bg);border-radius:20px;font-weight:600}

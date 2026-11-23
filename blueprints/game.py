@@ -33,6 +33,7 @@ def load_songs(d, night=None, pid=None):
     for s in songs:
         votes = by_song.get(s["id"], {})
         s["voted"] = len(votes)
+        s["voters"] = list(votes)
         s["eligible"] = max(sizes.get(s["night_id"], 0) - 1, 0)
         s["mine"] = votes.get(pid, {}).get("scores")
         if s["revealed"]:

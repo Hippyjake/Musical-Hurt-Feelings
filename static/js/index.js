@@ -31,12 +31,12 @@ function nowView(c) {
   if (!c) return ['none', '<h2>Now playing</h2><p class="muted">Waiting for the host to pick a song.</p>'];
   const head = `<h2>${esc(c.title)}</h2><p class="muted">${c.artist ? esc(c.artist) + ', ' : ''}submitted by ${esc(c.submitter)}${c.link ? ` (<a href="${esc(c.link)}" target="_blank" rel="noopener">listen</a>)` : ''}</p>`;
   if (c.revealed) return ['rev' + c.id + JSON.stringify(c.results), head + results(c)];
-  if (c.player_id === me.id) return ['own' + c.id + c.voted, head + `<p>Your song is up. Brace yourself.</p><p class="muted">${c.voted} of ${c.eligible} voted</p>`];
+  if (c.player_id === me.id) return ['own' + c.id, head + `<p>Your song is up. Brace yourself.</p><div id="voters" class="chips"></div>`];
   const sliders = S.categories.map(k => {
     const v = c.mine && c.mine[k.id] != null ? c.mine[k.id] : 5;
     return `<div class="slider"><label for="k${k.id}">${esc(k.name)}</label><b id="v${k.id}">${v}</b><input id="k${k.id}" data-k="${k.id}" type="range" min="0" max="10" value="${v}" oninput="$('#v${k.id}').textContent=this.value"></div>`;
   }).join('');
-  return ['sc' + c.id + (c.mine ? 1 : 0), head + sliders + `<button onclick="send(${c.id})">${c.mine ? 'Update scores' : 'Save scores'}</button><p class="muted"><span id="vc">${c.voted}</span> of ${c.eligible} voted</p>`];
+  return ['sc' + c.id + (c.mine ? 1 : 0), head + sliders + `<button onclick="send(${c.id})">${c.mine ? 'Update scores' : 'Save scores'}</button><div id="voters" class="chips"></div>`];
 }
 
 function render() {
@@ -51,7 +51,7 @@ function render() {
   const c = S.songs.find(s => s.id === S.current);
   const [k, html] = nowView(c);
   part('now', k, html);
-  const vc = $('#vc'); if (vc && c) vc.textContent = c.voted;
+  voterChips(c);
 
   setPhase(!c ? 'queue' : c.revealed ? 'reveal' : 'voting');
 
@@ -70,14 +70,29 @@ function render() {
       : '<p class="muted">Revealed songs show up here.</p>'));
 
   $('#host').classList.toggle('on', !!pin);
-  part('host', JSON.stringify([!!pin, S.current, c && c.revealed, c && c.voted, S.players.map(p => p.id)]),
-    pin ? (c && !c.revealed ? `<p class="muted">${c.voted} of ${c.eligible} voted</p><button onclick="host('reveal')">Reveal scores</button>` : '<p class="muted">Pick a song from the queue to start the next round.</p>') +
+  part('host', JSON.stringify([!!pin, S.current, c && c.revealed, S.players.map(p => p.id)]),
+    pin ? (c && !c.revealed ? `<button style="margin-top:0" onclick="host('reveal')">Reveal scores</button>` : '<p class="muted">Pick a song from the queue to start the next round.</p>') +
       `<details ontoggle="hostOpen=this.open"${hostOpen ? ' open' : ''}><summary>Host controls</summary>` +
       '<h3>Players</h3>' + S.players.map(p => `<div class="row"><span>${esc(p.name)}</span><button class="sm ghost" onclick="removePlayer(${p.id})">Remove</button></div>`).join('') +
       '<button class="ghost" onclick="stepDown()">Step down as host</button>' +
       '<div class="zone"><button class="danger" onclick="newNight()">Save tonight and start a new night</button>' +
       '<button class="danger" onclick="resetGame()">Delete everything</button></div></details>'
     : '<button class="ghost" style="margin:0" onclick="unlock()">Host controls</button>');
+}
+
+// Who has voted on the current song: everyone except the submitter gets a chip.
+// Kept in its own box so the sliders above it never redraw mid-vote.
+function voterChips(c) {
+  const box = $('#voters');
+  if (!box || !c) return;
+  const done = new Set(c.voters || []);
+  const list = S.players.filter(p => p.id !== c.player_id);
+  const key = JSON.stringify(list.map(p => [p.id, p.name, done.has(p.id)]));
+  if (box.dataset.k === key) return;
+  box.dataset.k = key;
+  box.innerHTML = list.length
+    ? list.map(p => `<span class="chip${done.has(p.id) ? ' done' : ''}">${esc(p.name)} ${done.has(p.id) ? '✓' : '…'}</span>`).join('')
+    : '<span class="muted">Waiting for more players to join.</span>';
 }
 
 // Phase-aware layout. The song form opens when nothing is playing and folds away
@@ -114,7 +129,7 @@ function leave() { me = null; localStorage.removeItem('mhf_me'); render(); }
 
 async function addSong(form) {
   const f = Object.fromEntries(new FormData(form));
-  try { await api('songs', {...f, player_id: me.id}); form.reset(); toast('Song submitted.'); poll(); }
+  try { await api('songs', {...f, player_id: me.id}); form.reset(); $('#submit').open = false; toast('Song submitted.'); poll(); }
   catch (e) { toast(e.message); }
 }
 
