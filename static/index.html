@@ -24,16 +24,18 @@
 
   <div id="game" hidden>
     <section id="now" class="card"></section>
-    <section id="submit" class="card">
-      <h2>Submit a song</h2>
-      <form onsubmit="event.preventDefault();addSong(this)">
-        <input name="link" type="text" inputmode="url" placeholder="Spotify or YouTube link (optional)" onchange="lookup(this)" onpaste="setTimeout(()=>this.blur(),0)">
-        <input name="title" type="text" maxlength="120" placeholder="Song title" required>
-        <input name="artist" type="text" maxlength="120" placeholder="Artist">
-        <button>Submit song</button>
-      </form>
+    <section id="queue" class="card">
+      <div id="queue-list"></div>
+      <details id="submit">
+        <summary>Submit a song</summary>
+        <form onsubmit="event.preventDefault();addSong(this)">
+          <input name="link" type="text" inputmode="url" placeholder="Spotify or YouTube link (optional)" onchange="lookup(this)" onpaste="setTimeout(()=>this.blur(),0)">
+          <input name="title" type="text" maxlength="120" placeholder="Song title" required>
+          <input name="artist" type="text" maxlength="120" placeholder="Artist">
+          <button>Submit song</button>
+        </form>
+      </details>
     </section>
-    <section id="queue" class="card"></section>
     <section id="board" class="card"></section>
     <section id="host" class="card"></section>
   </div>

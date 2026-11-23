@@ -22,7 +22,7 @@ function results(c) {
   if (!r.votes.length) return '<p class="muted">No votes were cast.</p>';
   return `<div class="big">${r.avg.toFixed(1)}<small>/10</small></div>` +
     S.categories.map(k => `<div class="res"><span>${esc(k.name)}</span><div class="bar"><i style="width:${r.cat[k.id] * 10}%"></i></div><b>${r.cat[k.id].toFixed(1)}</b></div>`).join('') +
-    `<details><summary>Who gave what</summary>` +
+    `<details open><summary>Who gave what</summary>` +
     `<p class="muted">${S.categories.map(k => esc(k.name)).join(', ')}</p>` +
     r.votes.map(v => `<p><b>${esc(v.name)}</b>: ${S.categories.map(k => v.scores[k.id]).join(', ')}</p>`).join('') + `</details>`;
 }
@@ -53,8 +53,10 @@ function render() {
   part('now', k, html);
   const vc = $('#vc'); if (vc && c) vc.textContent = c.voted;
 
+  setPhase(!c ? 'queue' : c.revealed ? 'reveal' : 'voting');
+
   const q = S.songs.filter(s => !s.revealed);
-  part('queue', JSON.stringify([q.map(s => s.id), S.current, !!pin]),
+  part('queue-list', JSON.stringify([q.map(s => s.id), S.current, !!pin]),
     '<h2>Song queue</h2>' + (q.length ? q.map(s =>
       `<div class="row"><span>${esc(s.title)}${s.artist ? ' by ' + esc(s.artist) : ''}<small>Submitted by ${esc(s.submitter)}</small></span>` +
       '<span class="acts">' + (s.id === S.current ? '<em>Playing now</em>' : pin ? `<button class="sm" onclick="host('current',{song_id:${s.id}})">Play</button>` : '') +
@@ -67,14 +69,27 @@ function render() {
       `<div class="row"><span>${i + 1}. ${esc(s.title)}<small>Submitted by ${esc(s.submitter)}</small></span><b>${s.results.avg.toFixed(1)}</b></div>`).join('')
       : '<p class="muted">Revealed songs show up here.</p>'));
 
+  $('#host').classList.toggle('on', !!pin);
   part('host', JSON.stringify([!!pin, S.current, c && c.revealed, c && c.voted, S.players.map(p => p.id)]),
-    pin ? '<h2>Host controls</h2>' +
-      (c && !c.revealed ? `<p class="muted">${c.voted} of ${c.eligible} voted</p><button onclick="host('reveal')">Reveal scores</button>` : '<p class="muted">Pick a song from the queue to start the next round.</p>') +
-      '<h2 style="margin-top:16px">Players</h2>' + S.players.map(p => `<div class="row"><span>${esc(p.name)}</span><button class="sm ghost" onclick="removePlayer(${p.id})">Remove</button></div>`).join('') +
-      '<button onclick="newNight()">Save tonight and start a new night</button>' +
-      '<button class="ghost" onclick="resetGame()">Delete everything</button>' +
-      '<button class="ghost" onclick="stepDown()">Step down as host</button>'
+    pin ? (c && !c.revealed ? `<p class="muted">${c.voted} of ${c.eligible} voted</p><button onclick="host('reveal')">Reveal scores</button>` : '<p class="muted">Pick a song from the queue to start the next round.</p>') +
+      `<details ontoggle="hostOpen=this.open"${hostOpen ? ' open' : ''}><summary>Host controls</summary>` +
+      '<h3>Players</h3>' + S.players.map(p => `<div class="row"><span>${esc(p.name)}</span><button class="sm ghost" onclick="removePlayer(${p.id})">Remove</button></div>`).join('') +
+      '<button class="ghost" onclick="stepDown()">Step down as host</button>' +
+      '<div class="zone"><button class="danger" onclick="newNight()">Save tonight and start a new night</button>' +
+      '<button class="danger" onclick="resetGame()">Delete everything</button></div></details>'
     : '<button class="ghost" style="margin:0" onclick="unlock()">Host controls</button>');
+}
+
+// Phase-aware layout. The song form opens when nothing is playing and folds away
+// once a song starts, unless someone is in the middle of filling it in.
+let phase = null, hostOpen = false;
+function setPhase(p) {
+  if (p === phase) return;
+  phase = p;
+  $('#game').dataset.phase = p;
+  const f = $('#submit'), form = f.querySelector('form');
+  const busy = [...form.querySelectorAll('input')].some(e => e.value || e === document.activeElement);
+  if (!busy) f.open = p === 'queue';
 }
 
 let awardsKey = null;

@@ -36,4 +36,24 @@ h2+.row{border-top:0}
 .bar i{display:block;height:100%;background:var(--hit)}
 details{margin-top:12px}
 summary{cursor:pointer;color:var(--mute)}
+/* Phase-aware layout: #game is a column and each phase reorders or hides cards. */
+#game{display:flex;flex-direction:column;gap:14px;margin:14px 0}
+#game>.card{margin:0}
+#now{order:1}
+#queue{order:2}
+#board{order:3}
+#host{order:4}
+#game[data-phase=voting] #board{display:none}
+#game[data-phase=voting] #host.on{order:2}
+#game[data-phase=voting] #queue{order:3}
+#game[data-phase=reveal] #board{order:2}
+#game[data-phase=reveal] #queue{order:3}
+/* Accordions for the song form and host controls */
+#submit,#host details{margin:12px 0 0;border-top:1px solid var(--line);padding-top:12px}
+#host>p:first-child{margin-top:0}
+#submit summary,#host summary{color:var(--ink);font-weight:700}
+#submit[open] summary,#host details[open] summary{margin-bottom:4px}
+#host h3{margin:16px 0 4px;font-size:16px}
+button.danger{background:none;color:var(--hit);border:1px solid var(--hit);opacity:.8}
+.zone{margin-top:20px;padding-top:12px;border-top:1px dashed var(--line)}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);padding:10px 16px;background:var(--ink);color:var(--bg);border-radius:20px;font-weight:600}
