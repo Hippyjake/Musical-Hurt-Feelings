@@ -11,11 +11,21 @@ async function api(path, body) {
   if (!r.ok) throw new Error(j.error || 'Something went wrong.');
   return j;
 }
-function part(id, key, html) { if (sig[id] !== key) { sig[id] = key; $('#' + id).innerHTML = html; } }
+function part(id, key, html) { if (sig[id] === key) return false; sig[id] = key; $('#' + id).innerHTML = html; return true; }
 let toastTimer;
 function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2500); }
 
-async function poll() { try { S = await api('state?player_id=' + (me ? me.id : '')); render(); } catch (e) {} }
+// When the phase changes, let the browser glide the cards to their new spots.
+// Browsers without view transitions (or with reduced motion on) just redraw.
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+function phaseOf(st) { const c = st.songs.find(s => s.id === st.current); return !c ? 'queue' : c.revealed ? 'reveal' : 'voting'; }
+async function poll() {
+  try {
+    S = await api('state?player_id=' + (me ? me.id : ''));
+    if (me && phase && phaseOf(S) !== phase && document.startViewTransition && !calm.matches) { const t = document.startViewTransition(render); t.ready.catch(() => {}); t.finished.catch(() => {}); }
+    else render();
+  } catch (e) {}
+}
 
 function results(c) {
   const r = c.results;
@@ -50,7 +60,10 @@ function render() {
 
   const c = S.songs.find(s => s.id === S.current);
   const [k, html] = nowView(c);
-  part('now', k, html);
+  if (part('now', k, html)) {
+    enter($('#now'));
+    if (c && c.revealed) countUp($('#now .big'), c.results.avg);
+  }
   voterChips(c);
 
   setPhase(!c ? 'queue' : c.revealed ? 'reveal' : 'voting');
@@ -82,6 +95,7 @@ function render() {
 
 // Who has voted on the current song: everyone except the submitter gets a chip.
 // Kept in its own box so the sliders above it never redraw mid-vote.
+let chipSeen = {};
 function voterChips(c) {
   const box = $('#voters');
   if (!box || !c) return;
@@ -90,8 +104,11 @@ function voterChips(c) {
   const key = JSON.stringify(list.map(p => [p.id, p.name, done.has(p.id)]));
   if (box.dataset.k === key) return;
   box.dataset.k = key;
+  // Chips that just flipped to done get a little bounce (not on first draw).
+  const before = chipSeen.song === c.id ? chipSeen.done : null;
+  chipSeen = {song: c.id, done};
   box.innerHTML = list.length
-    ? list.map(p => `<span class="chip${done.has(p.id) ? ' done' : ''}">${esc(p.name)} ${done.has(p.id) ? '✓' : '…'}</span>`).join('')
+    ? list.map(p => `<span class="chip${done.has(p.id) ? ' done' : ''}${before && done.has(p.id) && !before.has(p.id) ? ' pop' : ''}">${esc(p.name)} ${done.has(p.id) ? '✓' : '…'}</span>`).join('')
     : '<span class="muted">Waiting for more players to join.</span>';
 }
 
@@ -102,9 +119,28 @@ function setPhase(p) {
   if (p === phase) return;
   phase = p;
   $('#game').dataset.phase = p;
+  const c = S.songs.find(s => s.id === S.current);
+  const avg = c && c.revealed && c.results.votes.length ? c.results.avg : null;
+  $('#game').dataset.verdict = avg == null ? '' : avg >= 7.5 ? 'hit' : avg < 5 ? 'roast' : 'mid';
   const f = $('#submit'), form = f.querySelector('form');
   const busy = [...form.querySelectorAll('input')].some(e => e.value || e === document.activeElement);
   if (!busy) f.open = p === 'queue';
+}
+
+// Replay the slide-in on a card whose contents just changed.
+function enter(el) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+
+// Roll the big reveal number up from 0 to the final average.
+function countUp(el, to) {
+  if (!el || calm.matches) return;
+  const num = el.firstChild, t0 = performance.now(), ms = 900;
+  const step = t => {
+    const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    num.textContent = (to * e).toFixed(1);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  num.textContent = '0.0';
+  requestAnimationFrame(step);
 }
 
 let awardsKey = null;
