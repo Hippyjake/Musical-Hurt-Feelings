@@ -4,6 +4,18 @@ let me = JSON.parse(localStorage.getItem('mhf_me') || 'null');
 let pin = sessionStorage.getItem('mhf_pin') || '';
 let S = null;
 const sig = {};
+let compactNight = localStorage.getItem('mhf_header_night');
+function updateHeader() {
+  const next = compactHeaderNight(S, compactNight);
+  if (next !== compactNight) {
+    compactNight = next;
+    if (next === null) localStorage.removeItem('mhf_header_night');
+    else localStorage.setItem('mhf_header_night', next);
+  }
+  $('header').classList.toggle('compact', next !== null);
+  $('header').style.setProperty('--compact-height', Math.max(68, $('#who').scrollHeight + 28) + 'px');
+}
+window.addEventListener('resize', () => { if (S) updateHeader(); });
 
 async function api(path, body) {
   const r = await fetch('/api/' + path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
@@ -56,6 +68,7 @@ function render() {
   showAwards();
   $('#game').hidden = !me;
   $('#who').innerHTML = me ? `Playing as ${esc(me.name)}<button class="link" onclick="leave()">not you?</button>` : '';
+  updateHeader();
   if (!me) return;
 
   const c = S.songs.find(s => s.id === S.current);

@@ -70,6 +70,8 @@ def state():
         "SELECT id, ended FROM nights WHERE ended IS NOT NULL ORDER BY id DESC LIMIT 1"
     ).fetchone()
     return jsonify(
+        # Read-only identity for the header latch, including when the queue is empty.
+        night_started=d.execute("SELECT started FROM nights WHERE id = ?", (n,)).fetchone()["started"],
         players=players,
         categories=cats,
         songs=songs,
