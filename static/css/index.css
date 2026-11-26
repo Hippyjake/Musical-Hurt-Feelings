@@ -112,3 +112,7 @@ header.compact h1 span:nth-child(3){top:0;left:104px}
 header.compact #who{top:14px;left:70%;font-size:12px;text-align:right;overflow-wrap:anywhere}
 header.compact #who button{display:block;margin:0 0 0 auto;font-size:12px}
 @media(max-width:380px){header.compact .brand{padding-left:34px}header.compact h1{font-size:14px}header.compact h1 span:nth-child(2){left:51px}header.compact h1 span:nth-child(3){left:81px}header.compact .brand-icon{width:28px;height:28px;margin-top:-14px}header.compact #who{font-size:11px}}
+
+/* Call your shot: the picker's prediction under the revealed title */
+.prediction{margin:4px 0 0;font-weight:600}
+.picker{color:var(--hit)}

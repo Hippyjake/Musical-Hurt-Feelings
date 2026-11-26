@@ -27,6 +27,7 @@ def host(action):
         if song["revealed"]:
             return err("Revealed songs can't be removed.")
         d.execute("DELETE FROM scores WHERE song_id = ?", (sid,))
+        d.execute("DELETE FROM predictions WHERE song_id = ?", (sid,))
         d.execute("DELETE FROM songs WHERE id = ?", (sid,))
         if current_id(d) == sid:
             d.execute("DELETE FROM meta WHERE k = 'current'")
@@ -41,6 +42,7 @@ def host(action):
             return err("That player is part of revealed results and can't be removed.")
         for r in d.execute("SELECT id FROM songs WHERE player_id = ?", (pid,)).fetchall():
             d.execute("DELETE FROM scores WHERE song_id = ?", (r["id"],))
+            d.execute("DELETE FROM predictions WHERE song_id = ?", (r["id"],))
             d.execute("DELETE FROM songs WHERE id = ?", (r["id"],))
         d.execute("DELETE FROM scores WHERE player_id = ?", (pid,))
         d.execute("DELETE FROM players WHERE id = ?", (pid,))
@@ -53,7 +55,7 @@ def host(action):
             d.execute("UPDATE songs SET revealed = 1 WHERE id = ?", (c,))
     elif action == "reset":
         backup_db(d)
-        for t in ("scores", "songs", "players", "meta", "nights"):
+        for t in ("scores", "predictions", "songs", "players", "meta", "nights"):
             d.execute(f"DELETE FROM {t}")
         d.execute("INSERT INTO nights(started) VALUES(?)", (time.time(),))
     elif action == "newnight":

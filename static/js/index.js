@@ -49,11 +49,27 @@ function results(c) {
     r.votes.map(v => `<p><b>${esc(v.name)}</b>: ${S.categories.map(k => v.scores[k.id]).join(', ')}</p>`).join('') + `</details>`;
 }
 
+// How close the submitter's guess landed. Only shown after the reveal.
+function verdict(c) {
+  const p = c.prediction;
+  if (p == null || !c.results.votes.length) return '';
+  const off = p - c.results.avg;
+  const tag = Math.abs(off) <= 0.5 ? 'spot on 🎯' : Math.abs(off) <= 1.5 ? 'close' : off > 0 ? 'delusional 🤡' : 'too humble 😇';
+  return `<p class="prediction">${esc(c.submitter)} predicted ${p.toFixed(1)}, ${tag}</p>`;
+}
+
 function nowView(c) {
   if (!c) return ['none', '<h2>Now playing</h2><p class="muted">Waiting for the host to pick a song.</p>'];
-  const head = `<h2>${esc(c.title)}</h2><p class="muted">${c.artist ? esc(c.artist) + ', ' : ''}submitted by ${esc(c.submitter)}${c.link ? ` (<a href="${esc(c.link)}" target="_blank" rel="noopener">listen</a>)` : ''}</p>`;
-  if (c.revealed) return ['rev' + c.id + JSON.stringify(c.results), head + results(c)];
-  if (c.player_id === me.id) return ['own' + c.id, head + `<p>Your song is up. Brace yourself.</p><div id="voters" class="chips"></div>`];
+  const by = c.revealed ? `picked by <b class="picker">${esc(c.submitter)}</b>` : c.own ? 'your pick' : 'mystery pick';
+  const head = `<h2>${esc(c.title)}</h2><p class="muted">${c.artist ? esc(c.artist) + ', ' : ''}${by}${c.link ? ` (<a href="${esc(c.link)}" target="_blank" rel="noopener">listen</a>)` : ''}</p>`;
+  if (c.revealed) return ['rev' + c.id + JSON.stringify(c.results) + c.prediction, head + verdict(c) + results(c)];
+  if (c.own) {
+    const v = c.prediction != null ? c.prediction : 5;
+    return ['own' + c.id + (c.prediction != null ? 1 : 0), head +
+      `<p><b>Your song is on trial!</b> Poker face. Don't give yourself away.</p>` +
+      `<div class="slider"><label for="pred">Call your shot: what will the room give it?</label><b id="pv">${v.toFixed(1)}</b><input id="pred" type="range" min="0" max="10" step="0.5" value="${v}" oninput="$('#pv').textContent=(+this.value).toFixed(1)"></div>` +
+      `<button onclick="predict(${c.id})">${c.prediction != null ? 'Update prediction' : 'Save prediction'}</button><div id="voters" class="chips"></div>`];
+  }
   const sliders = S.categories.map(k => {
     const v = c.mine && c.mine[k.id] != null ? c.mine[k.id] : 5;
     return `<div class="slider"><label for="k${k.id}">${esc(k.name)}</label><b id="v${k.id}">${v}</b><input id="k${k.id}" data-k="${k.id}" type="range" min="0" max="10" value="${v}" oninput="$('#v${k.id}').textContent=this.value"></div>`;
@@ -84,7 +100,7 @@ function render() {
   const q = S.songs.filter(s => !s.revealed);
   part('queue-list', JSON.stringify([q.map(s => s.id), S.current, !!pin]),
     '<h2>Song queue</h2>' + (q.length ? q.map(s =>
-      `<div class="row"><span>${esc(s.title)}${s.artist ? ' by ' + esc(s.artist) : ''}<small>Submitted by ${esc(s.submitter)}</small></span>` +
+      `<div class="row"><span>${esc(s.title)}${s.artist ? ' by ' + esc(s.artist) : ''}<small>${s.own ? 'Your pick' : 'Mystery pick'}</small></span>` +
       '<span class="acts">' + (s.id === S.current ? '<em>Playing now</em>' : pin ? `<button class="sm" onclick="host('current',{song_id:${s.id}})">Play</button>` : '') +
       (pin ? `<button class="sm ghost" onclick="removeSong(${s.id})">Remove</button>` : '') + '</span></div>').join('')
       : '<p class="muted">No songs yet. Submit the first one.</p>'));
@@ -106,14 +122,15 @@ function render() {
     : '<button class="ghost" style="margin:0" onclick="unlock()">Host controls</button>');
 }
 
-// Who has voted on the current song: everyone except the submitter gets a chip.
+// Who has voted on the current song. Everyone gets a chip so the picker stays
+// secret; theirs ticks when they save a prediction.
 // Kept in its own box so the sliders above it never redraw mid-vote.
 let chipSeen = {};
 function voterChips(c) {
   const box = $('#voters');
   if (!box || !c) return;
   const done = new Set(c.voters || []);
-  const list = S.players.filter(p => p.id !== c.player_id);
+  const list = S.players;
   const key = JSON.stringify(list.map(p => [p.id, p.name, done.has(p.id)]));
   if (box.dataset.k === key) return;
   box.dataset.k = key;
@@ -186,6 +203,11 @@ async function send(id) {
   const scores = {};
   document.querySelectorAll('#now input[type=range]').forEach(i => scores[i.dataset.k] = i.value);
   try { await api('score', {player_id: me.id, song_id: id, scores}); toast('Scores saved.'); poll(); }
+  catch (e) { toast(e.message); }
+}
+
+async function predict(id) {
+  try { await api('predict', {player_id: me.id, song_id: id, value: $('#pred').value}); toast('Prediction saved.'); poll(); }
   catch (e) { toast(e.message); }
 }
 

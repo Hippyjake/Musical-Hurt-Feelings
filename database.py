@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS songs(
 CREATE TABLE IF NOT EXISTS scores(
   song_id INTEGER, player_id INTEGER, category_id INTEGER, value INTEGER NOT NULL,
   PRIMARY KEY(song_id, player_id, category_id));
+CREATE TABLE IF NOT EXISTS predictions(song_id INTEGER PRIMARY KEY, value REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS nights(id INTEGER PRIMARY KEY, started REAL, ended REAL);
 """

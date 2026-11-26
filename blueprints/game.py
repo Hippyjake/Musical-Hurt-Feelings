@@ -30,13 +30,33 @@ def load_songs(d, night=None, pid=None):
         )
         entry["scores"][r["category_id"]] = r["value"]
 
+    preds = dict(
+        d.execute(
+            "SELECT pr.song_id, pr.value FROM predictions pr JOIN songs s ON s.id = pr.song_id "
+            f"{where}",
+            args,
+        ).fetchall()
+    )
+
     for s in songs:
         votes = by_song.get(s["id"], {})
+        pred = preds.get(s["id"])
         s["voted"] = len(votes)
         s["voters"] = list(votes)
         s["eligible"] = max(sizes.get(s["night_id"], 0) - 1, 0)
         s["mine"] = votes.get(pid, {}).get("scores")
-        if s["revealed"]:
+        if not s["revealed"]:
+            # Blind submissions: nobody (host included) learns who picked an
+            # unrevealed song. The submitter's chip ticks once they predict,
+            # so the voter chips don't give them away by leaving them out.
+            s["own"] = s["player_id"] == pid
+            if s["own"]:
+                s["prediction"] = pred
+            if pred is not None:
+                s["voters"].append(s["player_id"])
+            del s["player_id"], s["submitter"]
+        else:
+            s["prediction"] = pred
             vals = [v for x in votes.values() for v in x["scores"].values()]
             s["results"] = {
                 "avg": sum(vals) / len(vals) if vals else 0,
@@ -167,6 +187,29 @@ def score():
         "INSERT OR REPLACE INTO scores VALUES(?, ?, ?, ?)",
         [(sid, pid, c, v) for c, v in vals.items()],
     )
+    d.commit()
+    return jsonify(ok=True)
+
+
+@bp.post("/api/predict")
+def predict():
+    j = request.json or {}
+    d = db()
+    pid, sid = j.get("player_id"), j.get("song_id")
+    song = d.execute("SELECT * FROM songs WHERE id = ?", (sid,)).fetchone()
+    if not song or song["night_id"] != cur_night(d) or not player_exists(d, pid):
+        return err("Song or player not found.", 404)
+    if song["revealed"]:
+        return err("Scores for this song are already revealed.")
+    if song["player_id"] != pid:
+        return err("Only the person who picked this song can predict its score.")
+    try:
+        value = round(float(j.get("value")) * 2) / 2
+    except (TypeError, ValueError):
+        return err("Pick a prediction.")
+    if not 0 <= value <= 10:
+        return err("Predictions must be between 0 and 10.")
+    d.execute("INSERT OR REPLACE INTO predictions VALUES(?, ?)", (sid, value))
     d.commit()
     return jsonify(ok=True)
 
