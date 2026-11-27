@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 
 from database import cur_night, current_id, db, player_exists
 from utils.helpers import clean_link, err, fetch_oembed
@@ -79,8 +79,19 @@ def load_songs(d, night=None, pid=None):
 @bp.get("/api/state")
 def state():
     d = db()
+    # The version and payload must come from the same SQLite snapshot.
+    d.execute("BEGIN")
     n = cur_night(d)
     pid = request.args.get("player_id", type=int)
+    version = d.execute("SELECT epoch, revision FROM refresh_version WHERE id = 1").fetchone()
+    # Scope the validator to the viewer: private guesses/own votes differ by player.
+    etag = f"{version['epoch']}-{version['revision']}-p{pid if pid is not None else 'guest'}"
+    if request.if_none_match.contains(etag):
+        d.commit()
+        response = Response(status=304)
+        response.set_etag(etag)
+        response.headers["Cache-Control"] = "private, no-cache"
+        return response
     players = [
         dict(r)
         for r in d.execute("SELECT id, name FROM players WHERE night_id = ? ORDER BY id", (n,))
@@ -89,8 +100,8 @@ def state():
     last = d.execute(
         "SELECT id, ended FROM nights WHERE ended IS NOT NULL ORDER BY id DESC LIMIT 1"
     ).fetchone()
-    return jsonify(
-        # Read-only identity for the header latch, including when the queue is empty.
+    response = jsonify(
+        # Retained for API compatibility; the header no longer needs a latch.
         night_started=d.execute("SELECT started FROM nights WHERE id = ?", (n,)).fetchone()["started"],
         players=players,
         categories=cats,
@@ -98,6 +109,10 @@ def state():
         current=current_id(d),
         last_night=dict(last) if last else None,
     )
+    d.commit()
+    response.set_etag(etag)
+    response.headers["Cache-Control"] = "private, no-cache"
+    return response
 
 
 @bp.get("/api/leaderboard")

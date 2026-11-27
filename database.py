@@ -57,6 +57,22 @@ def never_reuse_ids(con, table):
     )
 
 
+def init_refresh_version(con):
+    """Database-owned revision: atomic with writes, shared across workers/restarts.
+
+    Keep it outside meta/nights so Delete everything cannot reuse an old version.
+    Triggers also cover category changes and future writes to game tables.
+    """
+    con.execute("CREATE TABLE IF NOT EXISTS refresh_version("
+                "id INTEGER PRIMARY KEY CHECK(id = 1), epoch TEXT NOT NULL, revision INTEGER NOT NULL)")
+    con.execute("INSERT OR IGNORE INTO refresh_version VALUES(1, lower(hex(randomblob(16))), 0)")
+    for table in ("players", "categories", "songs", "scores", "predictions", "meta", "nights"):
+        for action in ("INSERT", "UPDATE", "DELETE"):
+            con.execute(f"CREATE TRIGGER IF NOT EXISTS refresh_{table}_{action.lower()} "
+                        f"AFTER {action} ON {table} BEGIN "
+                        "UPDATE refresh_version SET revision = revision + 1 WHERE id = 1; END")
+
+
 def init_db():
     os.makedirs(os.path.dirname(DB) or ".", exist_ok=True)
     con = sqlite3.connect(DB, timeout=10)
@@ -79,6 +95,7 @@ def init_db():
     never_reuse_ids(con, "songs")
     if not con.execute("SELECT 1 FROM nights").fetchone():
         con.execute("INSERT INTO nights(id, started) VALUES(1, ?)", (time.time(),))
+    init_refresh_version(con)
     have = {name: cid for cid, name in con.execute("SELECT id, name FROM categories")}
     removed = [cid for name, cid in have.items() if name not in CATEGORIES]
     added = [n for n in CATEGORIES if n not in have]

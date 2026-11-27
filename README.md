@@ -10,9 +10,14 @@ Built with Flask and SQLite. It runs in a single Docker container and needs no a
 - Join with just a name. Rejoining with the same name restores your seat.
 - Submit a song with an optional Spotify track or YouTube video link. Pasting a link auto-fills the title (and the artist for YouTube).
 - Score the song that is playing with a 0 to 10 slider per category. You can change your scores until the reveal, and you can't score your own song.
-- See a live count of how many people have voted and the song queue.
+- **Blind submissions:** the queue and voting screen hide who picked each song, including from the host. You can still recognize your own picks; everyone sees the submitter at the reveal.
+- **Call Your Shot:** while your song is being voted on, predict the room's average with a 0 to 10 slider in half-point steps. Save or update your prediction until the reveal. The saved guess appears for everyone with an accuracy label once scores are revealed; it does not affect scoring or awards.
+- Voter chips show names with a check mark when scores are saved. Everyone gets a chip to preserve the mystery; the submitter's chip checks when they save a prediction, not a vote.
 - The reveal shows the overall average, a bar for each category, and a "Who gave what" breakdown.
-- Phones refresh themselves every 2 seconds.
+- A three-phase layout focuses on the queue, voting, then the reveal. Song submission lives in the queue accordion and closes after submitting; administrative host controls are also collapsible.
+- A permanent small SVG/title bar keeps more room available for gameplay from the join screen onward.
+- Phase transitions, voting glow, reveal lighting, score count-up, and voter-chip bounces add movement. Reduced-motion preferences are respected; newer browser animation features have fallbacks.
+- Smart refresh checks for changes 1 second after each completed foreground refresh, or every 15 seconds when hidden. Returning to the page or completing an action requests an immediate refresh. Unchanged state skips the redraw; slow requests never overlap, time out after 10 seconds, and retry with backoff up to 30 seconds. Browser offline detection pauses requests until the connection returns.
 
 **Host** (unlocked with the host PIN)
 - Choose which queued song plays next, or remove a queued song.
@@ -31,7 +36,7 @@ Built with Flask and SQLite. It runs in a single Docker container and needs no a
 - **The Simon Cowell:** the player whose scores averaged lowest across the night.
 - **The Hype Man:** the player whose scores averaged highest.
 - **The Controversial Pick:** the song whose voters disagreed the most (highest standard deviation of each voter's overall score for it).
-- Awards need at least two voters, and ties are shared. They appear on the leaderboard page for any night or all nights, and on the join screen for 12 hours after the host saves a night.
+- Simon Cowell and Hype Man require at least two people with recorded votes and different averages; ties at either extreme are shared. Controversial Pick requires at least two ratings of a song and nonzero disagreement. A two-player game can produce the first two awards if both players rate each other's songs, but a song with only one rating cannot be controversial. They appear on the leaderboard page for any night or all nights, and on the join screen for 12 hours after the host saves a night.
 
 **Default categories:** Composition, Musicianship, Originality, Vocals, Lyrical depth, Vibe.
 
@@ -112,8 +117,8 @@ Changing `CATEGORIES` and restarting keeps existing scores for categories that r
 1. Everyone opens the app and joins with a name.
 2. Players submit songs.
 3. The host unlocks the host controls with the PIN and picks the first song.
-4. Everyone except the submitter scores it.
-5. The host reveals the scores and picks the next song.
+4. Everyone except the submitter scores it, without seeing who picked it. The submitter keeps a poker face and can save a prediction of the final average. Scores and predictions remain editable until the reveal.
+5. The host reveals the scores, submitter, saved prediction, and player breakdown, then picks the next song.
 6. At the end, the host taps **Save tonight and start a new night**. The results move into the archive and everyone rejoins for a fresh game.
 
 ## Project structure
@@ -128,14 +133,16 @@ Changing `CATEGORIES` and restarting keeps existing scores for categories that r
 │   └── helpers.py          # Link sanitizing, oEmbed lookups, JSON error helper
 ├── blueprints/
 │   ├── views.py            # HTML pages: / and /leaderboard
-│   ├── game.py             # Player actions: state, leaderboard data, join, submit, score, lookup
+│   ├── game.py             # Player actions: state, leaderboard data, join, submit, score, predict, lookup
 │   └── host.py             # Host actions: pick song, reveal, remove, new night, reset
 ├── static/
 │   ├── index.html          # Game page
 │   ├── leaderboard.html    # Leaderboard page
 │   ├── icon.png            # App icon
+│   ├── icon.svg            # Compact header logo
 │   ├── css/                # One stylesheet per page, plus shared awards.css
-│   └── js/                 # One script per page, plus shared awards.js (award calculations)
+│   └── js/                 # Page scripts, awards.js, and smart-refresh.js (poll scheduler)
+├── tests/                  # Browser-independent refresh tests and Flask/SQLite state tests
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -147,19 +154,39 @@ Changing `CATEGORIES` and restarting keeps existing scores for categories that r
 
 ## API
 
-All responses are JSON. Errors return `{"error": "..."}` with a 4xx status.
+Responses are JSON except an unchanged conditional `/api/state` request, which returns HTTP 304 with no body. Errors return `{"error": "..."}` with a 4xx status.
 
 | Method | Path                   | Purpose                                                     |
 |--------|------------------------|-------------------------------------------------------------|
-| GET    | `/api/state`           | Players, categories, songs, current song and the last saved night (`?player_id=`) |
+| GET    | `/api/state`           | Players, categories, songs, current song and the last saved night (`?player_id=`); viewer-specific ETag supports `If-None-Match` / 304 |
 | GET    | `/api/leaderboard`     | Revealed songs and nights (`?night=<id>` or `?night=all`)    |
 | POST   | `/api/join`            | Join tonight's game with a name                             |
 | POST   | `/api/songs`           | Submit a song                                               |
 | POST   | `/api/score`           | Save or update your scores for a song                       |
+| POST   | `/api/predict`         | Save or update the submitter's prediction (`player_id`, `song_id`, `value`) |
 | GET    | `/api/lookup`          | Validate a link and fetch title and artist (`?url=`)        |
 | POST   | `/api/host/<action>`   | Host actions. Body includes `pin`                           |
 
 Host actions: `check`, `current`, `reveal`, `remove`, `remove_player`, `newnight`, `reset`.
+
+## Tests and updates
+
+Run the refresh scheduler tests with Node.js 18 or newer (no npm dependencies), and the state tests with Python after installing `requirements.txt`:
+
+```bash
+node --test tests/smart-refresh.test.cjs
+python -m unittest discover -s tests -p 'test_*.py'
+```
+
+Tests use a temporary database and do not change your saved nights. Node.js is needed only for the tests, not to run the game.
+
+After applying a patch, rebuild and recreate the container to serve the new files:
+
+```bash
+docker compose up -d --build
+```
+
+Reload any already-open phones once to load updated scripts. With CasaOS, rebuild the image and recreate the app as described above. Existing game data stays in the mounted data folder. The refresh revision table and its triggers are installed automatically on startup, with no manual database reset.
 
 ## Data and backups
 
@@ -171,7 +198,7 @@ Host actions: `check`, `current`, `reveal`, `remove`, `remove_player`, `newnight
 
 - **A guest's phone can't reach the page** (`ERR_TOO_MANY_RETRIES`, "site can't be reached"). On newer Android versions, allow **Nearby devices** for their browser under Settings, Apps, the browser, Permissions. Also check that they are on the same Wi-Fi (not a guest network) and that Android isn't switching them to mobile data.
 - **Can't unlock host controls.** The PIN is whatever `HOST_PIN` was when the container was created. Check it with `docker exec <container> printenv HOST_PIN`.
-- **The voted counter never completes.** It counts everyone who joined, including stale names. Remove them from the Players list in the host controls.
+- **A voter chip stays pending.** It includes everyone who joined, including stale names. Remove absent players in the host controls. The submitter's chip checks only after saving a prediction; a prediction is optional and does not prevent the host from revealing.
 - **Title auto-fill is empty.** The server needs internet access to look up links. Spotify only returns the track name, so type the artist by hand.
 - **Docker says `compose` isn't a command.** Install the Compose plugin (for example `docker-compose-plugin` on Debian or Ubuntu).
 

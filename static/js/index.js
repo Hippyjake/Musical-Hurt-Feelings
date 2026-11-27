@@ -4,18 +4,6 @@ let me = JSON.parse(localStorage.getItem('mhf_me') || 'null');
 let pin = sessionStorage.getItem('mhf_pin') || '';
 let S = null;
 const sig = {};
-let compactNight = localStorage.getItem('mhf_header_night');
-function updateHeader() {
-  const next = compactHeaderNight(S, compactNight);
-  if (next !== compactNight) {
-    compactNight = next;
-    if (next === null) localStorage.removeItem('mhf_header_night');
-    else localStorage.setItem('mhf_header_night', next);
-  }
-  $('header').classList.toggle('compact', next !== null);
-  $('header').style.setProperty('--compact-height', Math.max(68, $('#who').scrollHeight + 28) + 'px');
-}
-window.addEventListener('resize', () => { if (S) updateHeader(); });
 
 async function api(path, body) {
   const r = await fetch('/api/' + path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
@@ -31,13 +19,33 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; 
 // Browsers without view transitions (or with reduced motion on) just redraw.
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 function phaseOf(st) { const c = st.songs.find(s => s.id === st.current); return !c ? 'queue' : c.revealed ? 'reveal' : 'voting'; }
-async function poll() {
-  try {
-    S = await api('state?player_id=' + (me ? me.id : ''));
-    if (me && phase && phaseOf(S) !== phase && document.startViewTransition && !calm.matches) { const t = document.startViewTransition(render); t.ready.catch(() => {}); t.finished.catch(() => {}); }
-    else render();
-  } catch (e) {}
+let stateETag = null;
+async function poll({signal, isCurrent}) {
+  const pid = me ? me.id : '';
+  const headers = stateETag ? {'If-None-Match': stateETag} : {};
+  const r = await fetch('/api/state?player_id=' + pid, {signal, headers, cache:'no-store'});
+  if (!isCurrent()) return;
+  if (r.status === 304) return; // No state parsing or redraw when nothing changed.
+  if (!r.ok) throw new Error('Could not refresh the game.');
+  const next = await r.json();
+  if (!isCurrent()) return;
+  stateETag = r.headers.get('ETag');
+  S = next;
+  const draw = () => { if (isCurrent()) render(); };
+  if (me && phase && phaseOf(S) !== phase && document.startViewTransition && !calm.matches) {
+    const t = document.startViewTransition(draw);
+    t.ready.catch(() => {});
+    t.finished.catch(() => {});
+    await t.finished.catch(() => {});
+  } else draw();
 }
+const poller = createSmartRefresh({poll, visible: () => !document.hidden});
+function refresh() { stateETag = null; poller.refresh(); }
+document.addEventListener('visibilitychange', () => poller.visibilityChanged());
+window.addEventListener('offline', () => poller.networkChanged(false));
+window.addEventListener('online', () => poller.networkChanged(true));
+window.addEventListener('pagehide', () => poller.stop());
+window.addEventListener('pageshow', () => poller.start());
 
 function results(c) {
   const r = c.results;
@@ -84,7 +92,6 @@ function render() {
   showAwards();
   $('#game').hidden = !me;
   $('#who').innerHTML = me ? `Playing as ${esc(me.name)}<button class="link" onclick="leave()">not you?</button>` : '';
-  updateHeader();
   if (!me) return;
 
   const c = S.songs.find(s => s.id === S.current);
@@ -173,10 +180,13 @@ function countUp(el, to) {
   requestAnimationFrame(step);
 }
 
-let awardsKey = null;
+let awardsKey = null, awardsTimer;
 async function showAwards() {
+  clearTimeout(awardsTimer);
   const box = $('#awards'), L = S.last_night;
   if (me || !L || S.songs.length || Date.now() / 1000 - L.ended > 12 * 3600) { box.hidden = true; return; }
+  // Unchanged state no longer redraws, so preserve the existing 12-hour expiry.
+  awardsTimer = setTimeout(() => { box.hidden = true; }, Math.max(0, (L.ended + 12 * 3600) * 1000 - Date.now()));
   if (awardsKey !== L.id) {
     awardsKey = L.id;
     try {
@@ -188,31 +198,31 @@ async function showAwards() {
 }
 
 async function join() {
-  try { me = await api('join', {name: $('#name').value}); localStorage.setItem('mhf_me', JSON.stringify(me)); localStorage.setItem('mhf_name', me.name); poll(); }
+  try { me = await api('join', {name: $('#name').value}); localStorage.setItem('mhf_me', JSON.stringify(me)); localStorage.setItem('mhf_name', me.name); refresh(); }
   catch (e) { toast(e.message); }
 }
-function leave() { me = null; localStorage.removeItem('mhf_me'); render(); }
+function leave() { me = null; localStorage.removeItem('mhf_me'); render(); refresh(); }
 
 async function addSong(form) {
   const f = Object.fromEntries(new FormData(form));
-  try { await api('songs', {...f, player_id: me.id}); form.reset(); $('#submit').open = false; toast('Song submitted.'); poll(); }
+  try { await api('songs', {...f, player_id: me.id}); form.reset(); $('#submit').open = false; toast('Song submitted.'); refresh(); }
   catch (e) { toast(e.message); }
 }
 
 async function send(id) {
   const scores = {};
   document.querySelectorAll('#now input[type=range]').forEach(i => scores[i.dataset.k] = i.value);
-  try { await api('score', {player_id: me.id, song_id: id, scores}); toast('Scores saved.'); poll(); }
+  try { await api('score', {player_id: me.id, song_id: id, scores}); toast('Scores saved.'); refresh(); }
   catch (e) { toast(e.message); }
 }
 
 async function predict(id) {
-  try { await api('predict', {player_id: me.id, song_id: id, value: $('#pred').value}); toast('Prediction saved.'); poll(); }
+  try { await api('predict', {player_id: me.id, song_id: id, value: $('#pred').value}); toast('Prediction saved.'); refresh(); }
   catch (e) { toast(e.message); }
 }
 
 async function host(action, extra = {}) {
-  try { await api('host/' + action, {pin, ...extra}); poll(); }
+  try { await api('host/' + action, {pin, ...extra}); refresh(); }
   catch (e) {
     toast(e.message);
     if (e.message === 'Wrong PIN') { pin = ''; sessionStorage.removeItem('mhf_pin'); render(); }
@@ -239,5 +249,4 @@ function removeSong(id) { if (confirm('Remove this song from the queue?')) host(
 function newNight() { if (confirm("Save tonight's results and start a new game night? Everyone will need to join again.")) host('newnight'); }
 function resetGame() { if (confirm('Delete everything, including saved past nights? A backup is saved first.')) host('reset'); }
 
-poll();
-setInterval(poll, 2000);
+poller.start();

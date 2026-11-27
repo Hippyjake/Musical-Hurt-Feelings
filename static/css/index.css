@@ -4,12 +4,6 @@ html{background:var(--bg);color-scheme:dark}
 [hidden]{display:none!important}
 body{margin:0;min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--ink);font:16px/1.45 ui-rounded,system-ui,-apple-system,"Segoe UI",sans-serif;padding:env(safe-area-inset-top) 16px calc(32px + env(safe-area-inset-bottom))}
 header,main{max-width:480px;margin:0 auto}
-header{padding:20px 0 4px}
-h1{margin:0;font:400 clamp(44px,15vw,68px)/.9 var(--poster);text-shadow:3px 3px 0 var(--hit)}
-h1 span{display:block}
-h1 span:nth-child(2){margin-left:.6em}
-h1 span:nth-child(3){margin-left:.15em}
-#who{margin:10px 0 0;font-size:14px;color:var(--mute)}
 .card{background:var(--panel);border-radius:14px;padding:16px;margin:14px 0}
 h2{margin:0 0 8px;font-size:20px}
 .muted,small{color:var(--mute)}
@@ -94,24 +88,14 @@ details::details-content{block-size:0;overflow:hidden;transition:block-size .3s 
 details[open]::details-content{block-size:auto}
 @media (prefers-reduced-motion:reduce){*,::view-transition-group(*){animation:none!important;transition:none!important}}
 
-/* Split-bar header: compress the existing title without changing game phases. */
-header{--title-size:clamp(44px,15vw,68px);position:relative;height:calc(var(--title-size)*2.7 + 54px);padding:20px 0 4px;transition:height .35s ease,padding .35s ease}
-.brand{position:relative;min-width:0;padding-left:0;transition:padding-left .35s ease}
-.brand-icon{position:absolute;top:0;left:0;opacity:0;transform:scale(.6);transition:opacity .35s ease,transform .35s ease}
-header h1{position:relative;height:calc(var(--title-size)*2.7);font-size:var(--title-size);line-height:.9;transition:height .35s ease,font-size .35s ease,line-height .35s ease,text-shadow .35s ease}
-header h1 span{position:absolute;top:0;left:0;margin:0;transition:top .35s ease,left .35s ease}
-header h1 span:nth-child(2){top:.9em;left:.6em;margin:0}
-header h1 span:nth-child(3){top:1.8em;left:.15em;margin:0}
-header #who{position:absolute;top:calc(var(--title-size)*2.7 + 20px);left:0;right:0;margin:0;transition:top .35s ease,left .35s ease,font-size .35s ease}
-header.compact{height:var(--compact-height,68px);padding:14px 0 8px}
-header.compact .brand{padding-left:40px;width:65%}
-header.compact .brand-icon{opacity:1;transform:scale(1);top:50%;margin-top:-16px}
-header.compact h1{height:32px;font-size:18px;line-height:32px;text-shadow:none;white-space:nowrap}
-header.compact h1 span:nth-child(2){top:0;left:66px}
-header.compact h1 span:nth-child(3){top:0;left:104px}
-header.compact #who{top:14px;left:70%;font-size:12px;text-align:right;overflow-wrap:anywhere}
-header.compact #who button{display:block;margin:0 0 0 auto;font-size:12px}
-@media(max-width:380px){header.compact .brand{padding-left:34px}header.compact h1{font-size:14px}header.compact h1 span:nth-child(2){left:51px}header.compact h1 span:nth-child(3){left:81px}header.compact .brand-icon{width:28px;height:28px;margin-top:-14px}header.compact #who{font-size:11px}}
+/* Permanent compact header: no phase-dependent resizing or positioning. */
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 0 8px;min-height:68px}
+.brand{display:flex;align-items:center;gap:8px;min-width:0;flex-shrink:0}
+.brand-icon{display:block;flex-shrink:0}
+header h1{margin:0;font:400 18px/1.2 var(--poster);white-space:nowrap}
+header #who{margin:0;min-width:0;color:var(--mute);font-size:12px;text-align:right;overflow-wrap:anywhere}
+header #who button{display:block;margin:0 0 0 auto;font-size:12px}
+@media(max-width:380px){header{gap:8px}.brand{gap:6px}header h1{font-size:14px}.brand-icon{width:28px;height:28px}header #who{font-size:11px}}
 
 /* Call your shot: the picker's prediction under the revealed title */
 .prediction{margin:4px 0 0;font-weight:600}
