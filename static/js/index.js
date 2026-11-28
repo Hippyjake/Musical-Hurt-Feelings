@@ -75,14 +75,14 @@ function nowView(c) {
     const v = c.prediction != null ? c.prediction : 5;
     return ['own' + c.id + (c.prediction != null ? 1 : 0), head +
       `<p><b>Your song is on trial!</b> Poker face. Don't give yourself away.</p>` +
-      `<div class="slider"><label for="pred">Call your shot: what will the room give it?</label><b id="pv">${v.toFixed(1)}</b><input id="pred" type="range" min="0" max="10" step="0.5" value="${v}" oninput="$('#pv').textContent=(+this.value).toFixed(1)"></div>` +
-      `<button onclick="predict(${c.id})">${c.prediction != null ? 'Update prediction' : 'Save prediction'}</button><div id="voters" class="chips"></div>`];
+      `<div class="slider"><label for="pred">Call your shot: what will the room give it?</label><b id="pv" class="score">${v.toFixed(1)}</b><input id="pred" type="range" min="0" max="10" step="0.5" value="${v}" oninput="slide(this,'pv',1)"></div>` +
+      `<button class="lock${c.prediction != null ? ' locked' : ''}" onclick="predict(${c.id})">${c.prediction != null ? 'Prediction locked ✓' : 'Lock in prediction'}</button><div id="voters" class="chips"></div>`];
   }
   const sliders = S.categories.map(k => {
     const v = c.mine && c.mine[k.id] != null ? c.mine[k.id] : 5;
-    return `<div class="slider"><label for="k${k.id}">${esc(k.name)}</label><b id="v${k.id}">${v}</b><input id="k${k.id}" data-k="${k.id}" type="range" min="0" max="10" value="${v}" oninput="$('#v${k.id}').textContent=this.value"></div>`;
+    return `<div class="slider"><label for="k${k.id}">${esc(k.name)}</label><b id="v${k.id}" class="score">${v}</b><input id="k${k.id}" data-k="${k.id}" type="range" min="0" max="10" value="${v}" oninput="slide(this,'v${k.id}')"></div>`;
   }).join('');
-  return ['sc' + c.id + (c.mine ? 1 : 0), head + sliders + `<button onclick="send(${c.id})">${c.mine ? 'Update scores' : 'Save scores'}</button><div id="voters" class="chips"></div>`];
+  return ['sc' + c.id + (c.mine ? 1 : 0), head + sliders + `<button class="lock${c.mine ? ' locked' : ''}" onclick="send(${c.id})">${c.mine ? 'Scores locked in ✓' : 'Lock in scores'}</button><div id="voters" class="chips"></div>`];
 }
 
 function render() {
@@ -98,7 +98,8 @@ function render() {
   const [k, html] = nowView(c);
   if (part('now', k, html)) {
     enter($('#now'));
-    if (c && c.revealed) countUp($('#now .big'), c.results.avg);
+    $('#now').querySelectorAll('input[type=range]').forEach(i => tint(i));
+    if (c && c.revealed) { countUp($('#now .big'), c.results.avg); haptic.reveal(); }
   }
   voterChips(c);
 
@@ -164,6 +165,30 @@ function setPhase(p) {
   if (!busy) f.open = p === 'queue';
 }
 
+// Vibration where the browser supports it (Android Chrome); silently ignored elsewhere.
+const haptic = (() => {
+  const buzz = p => { try { if (!calm.matches && navigator.vibrate) navigator.vibrate(p); } catch (e) {} };
+  return {tick: () => buzz(8), lock: () => buzz(35), reveal: () => buzz([25, 40, 25])};
+})();
+
+// Score colour runs from icy roast through lukewarm to fire.
+function heat(v) { return v < 4 ? 'roast' : v < 7 ? 'meh' : v < 9 ? 'jam' : 'fire'; }
+function tint(input) {
+  const v = +input.value, box = input.closest('.slider');
+  box.dataset.heat = heat(v);
+  box.style.setProperty('--fill', v * 10 + '%');
+}
+// Slider moved: update the badge, colour and fill, buzz on each new notch, and unlock the button.
+function slide(input, badge, half) {
+  const b = $('#' + badge);
+  b.textContent = half ? (+input.value).toFixed(1) : input.value;
+  tint(input);
+  b.classList.remove('bump'); void b.offsetWidth; b.classList.add('bump');
+  haptic.tick();
+  const btn = $('#now .lock.locked');
+  if (btn) { btn.classList.remove('locked'); btn.textContent = btn.textContent.startsWith('Pred') ? 'Update prediction' : 'Update scores'; }
+}
+
 // Replay the slide-in on a card whose contents just changed.
 function enter(el) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
 
@@ -212,12 +237,12 @@ async function addSong(form) {
 async function send(id) {
   const scores = {};
   document.querySelectorAll('#now input[type=range]').forEach(i => scores[i.dataset.k] = i.value);
-  try { await api('score', {player_id: me.id, song_id: id, scores}); toast('Scores saved.'); refresh(); }
+  try { await api('score', {player_id: me.id, song_id: id, scores}); haptic.lock(); toast('Scores locked in.'); refresh(); }
   catch (e) { toast(e.message); }
 }
 
 async function predict(id) {
-  try { await api('predict', {player_id: me.id, song_id: id, value: $('#pred').value}); toast('Prediction saved.'); refresh(); }
+  try { await api('predict', {player_id: me.id, song_id: id, value: $('#pred').value}); haptic.lock(); toast('Prediction locked in.'); refresh(); }
   catch (e) { toast(e.message); }
 }
 
